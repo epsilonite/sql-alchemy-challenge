@@ -33,14 +33,14 @@ app = Flask(__name__)
 def welcome():
     """List all available api routes."""
     return (
-        f"<h1>Hawaii Climate Analysis Portal</h1>"
+        f"<h1>Hawaii Climate Data Portal</h1>"
         f"<h2>Available Routes:</h2>"
         f"<h3>/api/v1/precipitation</br>"
         f"/api/v1/stations</br>"
         f"/api/v1/temperatures</br>"
         f"/api/v1/temperatures/2010-01-01</br>"
         f"/api/v1/temperatures/2010-01-01/2017-08-23</br>"
-        f"/api/v1/temperatures/USC00519281</h3>"
+        f"/api/v1/temperatures/station/USC00519281</h3>"
         f"Available Date Range: 2010-01-01 to 2017-08-23</br>"
         f"Dates must be in ISO format YYYY-MM-DD</br>"
         f"Available Stations: check  /api/v1/stations"
@@ -87,7 +87,7 @@ def temperatures():
         year_temp[date]=tobs
     return jsonify(year_temp)
 
-@app.route("/api/v1/temperatures/<station>")
+@app.route("/api/v1/temperatures/station/<station>")
 def temperatures_stn(station):
     """Returns jsonified data for given station"""
     """Only returns the jsonified data for the last year of data"""
