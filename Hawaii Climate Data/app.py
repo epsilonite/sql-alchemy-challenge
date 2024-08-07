@@ -1,7 +1,5 @@
 # Import the dependencies.
-import numpy as np
 import datetime as dt
-import sqlalchemy
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine, func
@@ -16,8 +14,8 @@ Base = automap_base()
 # reflect the tables
 Base.prepare(autoload_with=engine)
 # Save references to each table
-meas = Base.classes.measurement
-stns = Base.classes.station
+msr = Base.classes.measurement
+stn = Base.classes.station
 # Create our session (link) from Python to the DB
 # session = Session(engine)
 
@@ -35,115 +33,131 @@ def welcome():
     return (
         f"<h1>Hawaii Climate Data Portal</h1>"
         f"<h2>Available Routes:</h2>"
-        f"<h3>/api/v1/precipitation</br>"
-        f"/api/v1/stations</br>"
-        f"/api/v1/temperatures</br>"
-        f"/api/v1/temperatures/2010-01-01</br>"
-        f"/api/v1/temperatures/2010-01-01/2017-08-23</br>"
-        f"/api/v1/temperatures/station/USC00519281</h3>"
+        f"<h3>/api/v1.0/precipitation</br>"
+        f"/api/v1.0/stations</br>"
+        f"/api/v1.0/temperatures</br>"
+        f"/api/v1.0/temperatures/USC00519281</br>"
+        f"/api/v1.0/2010-01-01</br>"
+        f"/api/v1.0/2010-01-01/2017-08-23</h3>"
         f"Available Date Range: 2010-01-01 to 2017-08-23</br>"
         f"Dates must be in ISO format YYYY-MM-DD</br>"
         f"Available Stations: check  /api/v1/stations"
     )
 
-@app.route("/api/v1/precipitation")
+@app.route("/api/v1.0/precipitation")
 def precipitation():
     """Returns json with the date as the key and the value as the precipitation"""
     """Only returns the jsonified precipitation data for the last year in the database"""
     # Create our session (link) from Python to the DB
     session = Session(engine)
-    results = session.query(meas.date,func.max(meas.prcp)).group_by(meas.date).order_by(meas.date).filter(meas.date>"2016-08-22").all()
+    # Result returns maximum recorded rainfall for each day from 2016-08-23 to 2017-08-23
+    # (derived from data exploration modeled in jupyter notebook)
+    result = session.query(msr.date,msr.prcp).order_by(msr.date).filter(msr.date>"2016-08-22").all()
     session.close()
     # Create a dictionary from the row data
-    year_prcp = {}
-    for date, prcp in results:
-        year_prcp[date]=prcp
-    return jsonify(year_prcp)
+    dict = {}
+    for date, prcp in result:
+        dict[date]=prcp
+    return jsonify(dict)
 
-@app.route("/api/v1/stations")
+@app.route("/api/v1.0/stations")
 def stations():
     """Returns jsonified data of all of the stations in the database"""
     # Create our session (link) from Python to the DB
     session = Session(engine)
-    results = session.query(stns.station,stns.name).all()
+    result = session.query(stn.station,stn.name,stn.latitude,stn.longitude,stn.elevation).all()
     session.close()
     # Create a dictionary from the row data
-    all_stns = {}
-    for station, name in results:
-        all_stns[station]=name
-    return jsonify(all_stns)
+    dict = {}
+    for station, name, latitude, longitude, elevation in result:
+        dict[station]={'name':name, 'latitude':latitude, 'longitude':longitude, 'elevation':elevation}
+    return jsonify(dict)
 
-@app.route("/api/v1/temperatures")
+@app.route("/api/v1.0/temperatures")
 def temperatures():
     """Returns jsonified data for the most active station (USC00519281)"""
     """Only returns the jsonified data for the last year of data"""
     # Create our session (link) from Python to the DB
     session = Session(engine)
-    results = session.query(meas.date,meas.tobs).order_by(meas.date).filter(meas.date>"2016-08-22").filter(meas.station=='USC00519281').all()
+    # Result returns temperature data for USC00519281 for each day from 2016-08-23 to 2017-08-23
+    result = session.query(msr.date,msr.tobs).order_by(msr.date).filter(msr.date>"2016-08-22").filter(msr.station=='USC00519281').all()
     session.close()
     # Create a dictionary from the row data
-    year_temp = {}
-    for date, tobs in results:
-        year_temp[date]=tobs
-    return jsonify(year_temp)
+    dict = {}
+    for date, tobs in result:
+        dict[date]=tobs
+    return jsonify(dict)
 
-@app.route("/api/v1/temperatures/station/<station>")
+@app.route("/api/v1.0/temperatures/<station>")
 def temperatures_stn(station):
     """Returns jsonified data for given station"""
     """Only returns the jsonified data for the last year of data"""
     # Create our session (link) from Python to the DB
     session = Session(engine)
-    if station in [session.query(meas.station).distinct().all()[i][0] for i in range(0,session.query(meas.station).distinct().count())]:
-        results = session.query(meas.date,meas.tobs).order_by(meas.date).filter(meas.date>"2016-08-22").filter(meas.station==station).all()
+    if station in [session.query(msr.station).distinct().all()[i][0] for i in range(0,session.query(msr.station).distinct().count())]:
+        # Result returns temperature data for given station for each day from 2016-08-23 to 2017-08-23
+        result = session.query(msr.date,msr.tobs).order_by(msr.date).filter(msr.date>"2016-08-22").filter(msr.station==station).all()
         session.close()
-    else:
-        return jsonify({"error": f"Station: {station} is not found",
-                        'stations': 'USC00519281, USC00519397, USC00513117, USC00519523, USC00516128, USC00514830, USC00511918, USC00517948, USC00518838'}), 404
-    # Create a dictionary from the row data
-    year_temp = {}
-    for date, tobs in results:
-        year_temp[date]=tobs
-    return jsonify(year_temp)
+        # Create a dictionary from the row data
+        dict = {}
+        for date, tobs in result:
+            dict[date]=tobs
+        return jsonify(dict)
+    # Error message
+    session.close()
+    return jsonify({"error": f"Station: {station} is not found",
+                    'stations': 'USC00519281, USC00519397, USC00513117, USC00519523, USC00516128, USC00514830, USC00511918, USC00517948, USC00518838'}), 404
 
-@app.route("/api/v1/temperatures/<start_date>")
+@app.route("/api/v1.0/<start_date>")
 def temperatures1(start_date):
     """Accepts the start date as a parameter from the URL"""
     """Returns the min, max, and average temperatures calculated from the given start date to the end of the dataset"""
     try:
         start = dt.date.fromisoformat(start_date)-dt.timedelta(days=1)
-        if start>=dt.date(2009,12,31) and start<dt.date(2017,8,23):
+        if start>dt.date(2009,12,30) and start<dt.date(2017,8,23):
             # Create our session (link) from Python to the DB
             session = Session(engine)
-            results = session.query(func.min(meas.tobs),func.max(meas.tobs),func.avg(meas.tobs)).filter(meas.date>start).one()
+            # Result returns min,max,avg of temperatures from start date to 2017-08-23
+            result = session.query(func.min(msr.tobs),func.max(msr.tobs),func.avg(msr.tobs)).filter(msr.date>start).one()
             session.close()
-            # Create a dictionary from results
-            return jsonify({'Min':results[0],'Max':results[1],'Average':round(results[2],1)})
+            # Create a dictionary from result
+            return jsonify({'Min':result[0],'Max':result[1],'Average':round(result[2],1)})
+        # Error message for date out of range
         return jsonify({"error": f"Date input: {start_date} is not in the available date range 2010-01-01 to 2017-08-23"}), 404
+    # Error message for invalid date format
     except ValueError:
         return jsonify({"error": f"Date input: {start_date} is not a valid date in isoformat YYYY-MM-DD"}), 404
 
-@app.route("/api/v1/temperatures/<start_date>/<end_date>")
+@app.route("/api/v1.0/<start_date>/<end_date>")
 def temperatures2(start_date,end_date):
     try:
+        # Test start date for ISO format
         start = dt.date.fromisoformat(start_date)-dt.timedelta(days=1)
-        if start<dt.date(2009,12,31) or start>=dt.date(2017,8,23):
-            return jsonify({"error": f"Date input: {start_date} is not in the available date range 2010-01-01 to 2017-08-23"}), 404
+        # Error message for start date out of range
+        if start<dt.date(2009,12,31) or start>dt.date(2017,8,22):
+            return jsonify({"error": f"Date input: start date: {start_date} is before the available date range 2010-01-01 to 2017-08-23"}), 404
         try:
+            #Test end date for ISO format
             end = dt.date.fromisoformat(end_date)+dt.timedelta(days=1)
-            if end<=start: 
-                return jsonify({"error": f"Date input: {end_date} is before start date"}), 404
-            if end>dt.date(2017,8,24): 
-                return jsonify({"error": f"Date input: {end_date} is not in the available date range 2010-01-01 to 2017-08-23"}), 404
+            if end<start+dt.timedelta(days=2):
+                # Error message for end date before start date
+                return jsonify({"error": f"Date input: end date: {end_date} is before start date: {start_date}"}), 404
+            if end>dt.date(2017,8,24):
+                # Error message for end date out of range
+                return jsonify({"error": f"Date input: end date: {end_date} is after the available date range 2010-01-01 to 2017-08-23"}), 404
             # Create our session (link) from Python to the DB
             session = Session(engine)
-            results = session.query(func.min(meas.tobs),func.max(meas.tobs),func.avg(meas.tobs)).filter(meas.date>start).filter(meas.date<end).one()
+            # Result returns min,max,avg of temperatures from start date to end date
+            result = session.query(func.min(msr.tobs),func.max(msr.tobs),func.avg(msr.tobs)).filter(msr.date>start).filter(msr.date<end).one()
             session.close()
-            # Create a dictionary from results
-            return jsonify({'Min':results[0],'Max':results[1],'Average':round(results[2],1)})
+            # Create a dictionary from result
+            return jsonify({'Min':result[0],'Max':result[1],'Average':round(result[2],1)})
+        # Error message for invalid end date format
         except ValueError:
-            return jsonify({"error": f"Date input: {end_date} is not a valid date in isoformat YYYY-MM-DD"}), 404
+            return jsonify({"error": f"Date input: end date: {end_date} is not a valid date in isoformat YYYY-MM-DD"}), 404
+    # Error message for invalid start date format
     except ValueError:
-        return jsonify({"error": f"Date input: {start_date} is not a valid date in isoformat YYYY-MM-DD"}), 404
+        return jsonify({"error": f"Date input: start date: {start_date} is not a valid date in isoformat YYYY-MM-DD"}), 404
 
 if __name__ == '__main__':
     app.run(debug=True)
